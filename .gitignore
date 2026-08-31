@@ -1,0 +1,21 @@
+# Configurações de ambiente
+.env
+*.env
+.env.*
+!.env.example
+
+# Arquivos de log e sistema
+*.log
+.DS_Store
+Thumbs.db
+
+# Volumes / Dados Locais
+/data
+/pgdata
+/redisdata
+/evolution_instances
+
+# Arquivos temporários n8n e chatwoot
+node_modules/
+dist/
+tmp/

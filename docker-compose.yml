@@ -1,0 +1,132 @@
+version: '3.8'
+
+services:
+  # ==========================================
+  # BANCO DE DADOS E CACHE (COMPARTILHADOS)
+  # ==========================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: isp-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    container_name: isp-redis
+    restart: always
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+
+  # ==========================================
+  # CAMADA DE COMUNICAÇÃO (EVOLUTION API)
+  # ==========================================
+  evolution-api:
+    image: atendai/evolution-api:v2.1.1
+    container_name: isp-evolution
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - SERVER_URL=${EVOLUTION_SERVER_URL}
+      - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY}
+      - DATABASE_ENABLED=true
+      - DATABASE_PROVIDER=postgres
+      - DATABASE_CONNECTION_URI=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      - CACHE_ENABLED=true
+      - CACHE_REDIS_URI=redis://redis:6379
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - evolution_instances:/evolution/instances
+
+  # ==========================================
+  # CAMADA DE ORQUESTRAÇÃO E FLUXOS (n8n)
+  # ==========================================
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: isp-n8n
+    restart: always
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - NODE_ENV=production
+      - WEBHOOK_URL=${N8N_WEBHOOK_URL}
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
+      - DB_POSTGRESDB_USER=${POSTGRES_USER}
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+  # ==========================================
+  # INBOX DOS ATENDENTES (CHATWOOT)
+  # ==========================================
+  chatwoot-web:
+    image: chatwoot/chatwoot:v3.10.0
+    container_name: isp-chatwoot-web
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - FRONTEND_URL=${CHATWOOT_FRONTEND_URL}
+      - SECRET_KEY_BASE=${CHATWOOT_SECRET_KEY}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_DATABASE=chatwoot
+      - POSTGRES_USERNAME=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - REDIS_URL=redis://redis:6379
+      - INSTALLATION_ENV=docker
+    entrypoint: docker/entrypoints/docker-entrypoint.sh
+    command: ['bundle', 'exec', 'rails', 's', '-p', '3000', '-b', '0.0.0.0']
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - chatwoot_storage:/app/storage
+
+  chatwoot-worker:
+    image: chatwoot/chatwoot:v3.10.0
+    container_name: isp-chatwoot-worker
+    restart: always
+    environment:
+      - FRONTEND_URL=${CHATWOOT_FRONTEND_URL}
+      - SECRET_KEY_BASE=${CHATWOOT_SECRET_KEY}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_DATABASE=chatwoot
+      - POSTGRES_USERNAME=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - REDIS_URL=redis://redis:6379
+      - INSTALLATION_ENV=docker
+    entrypoint: docker/entrypoints/docker-entrypoint.sh
+    command: ['bundle', 'exec', 'sidekiq', '-C', 'config/sidekiq.yml']
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - chatwoot_storage:/app/storage
+
+volumes:
+  postgres_data:
+  redis_data:
+  evolution_instances:
+  n8n_data:
+  chatwoot_storage:
