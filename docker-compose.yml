@@ -48,7 +48,7 @@ services:
       - SERVER_URL=${EVOLUTION_SERVER_URL}
       - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY}
       - DATABASE_ENABLED=true
-      - DATABASE_PROVIDER=postgres
+      - DATABASE_PROVIDER=postgresql
       - DATABASE_CONNECTION_URI=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
       - CACHE_ENABLED=true
       - CACHE_REDIS_URI=redis://redis:6379
@@ -107,12 +107,13 @@ services:
       - FRONTEND_URL=${CHATWOOT_FRONTEND_URL}
       - SECRET_KEY_BASE=${CHATWOOT_SECRET_KEY}
       - POSTGRES_HOST=postgres
-      - POSTGRES_DATABASE=chatwoot
+      - POSTGRES_DATABASE=${POSTGRES_DB}
       - POSTGRES_USERNAME=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - REDIS_URL=redis://redis:6379
+      - RAILS_ENV=production
+      - NODE_ENV=production
       - INSTALLATION_ENV=docker
-    entrypoint: docker/entrypoints/docker-entrypoint.sh
     command: ['bundle', 'exec', 'rails', 's', '-p', '3000', '-b', '0.0.0.0']
     depends_on:
       postgres:
@@ -135,12 +136,13 @@ services:
       - FRONTEND_URL=${CHATWOOT_FRONTEND_URL}
       - SECRET_KEY_BASE=${CHATWOOT_SECRET_KEY}
       - POSTGRES_HOST=postgres
-      - POSTGRES_DATABASE=chatwoot
+      - POSTGRES_DATABASE=${POSTGRES_DB}
       - POSTGRES_USERNAME=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - REDIS_URL=redis://redis:6379
+      - RAILS_ENV=production
+      - NODE_ENV=production
       - INSTALLATION_ENV=docker
-    entrypoint: docker/entrypoints/docker-entrypoint.sh
     command: ['bundle', 'exec', 'sidekiq', '-C', 'config/sidekiq.yml']
     depends_on:
       postgres:
