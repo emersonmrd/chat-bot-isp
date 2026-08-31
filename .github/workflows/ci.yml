@@ -1,0 +1,54 @@
+name: CI - Lint, Test & Validate Infra
+
+on:
+  push:
+    branches: [ "main", "feature/**" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  validate-docker:
+    name: Validar Docker Compose e Sintaxe
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do Repositório
+        uses: actions/checkout@v4
+
+      - name: Preparar arquivo .env para CI
+        run: cp .env.example .env
+
+      - name: Validar Sintaxe do docker-compose.yml
+        run: docker compose config --quiet
+
+      - name: Testar subida dos serviços essenciais (Sanity Check)
+        run: |
+          docker compose up -d postgres redis
+          sleep 10
+          docker compose ps
+          docker compose exec -T postgres pg_isready -U isp_user -d isp_chatbot_db
+          docker compose exec -T redis redis-cli ping
+          docker compose down
+
+  validate-workflows:
+    name: Validar Schemas JSON dos Fluxos do n8n
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do Repositório
+        uses: actions/checkout@v4
+
+      - name: Validar integridade dos arquivos JSON do n8n
+        run: |
+          python3 -c "
+          import os, json, glob
+          workflows = glob.glob('n8n/workflows/*.json')
+          for wf in workflows:
+              with open(wf) as f:
+                  try:
+                      json.load(f)
+                      print(f'JSON valido: {wf}')
+                  except Exception as e:
+                      print(f'Erro de sintaxe em {wf}: {e}')
+                      exit(1)
+          "
