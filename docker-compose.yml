@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # ==========================================
   # BANCO DE DADOS E CACHE (COMPARTILHADOS)
@@ -41,7 +39,7 @@ services:
   # CAMADA DE COMUNICAÇÃO (EVOLUTION API)
   # ==========================================
   evolution-api:
-    image: atendai/evolution-api:v2.1.1
+    image: evoapicloud/evolution-api:v2.3.6
     container_name: isp-evolution
     restart: always
     ports:
@@ -61,17 +59,12 @@ services:
         condition: service_healthy
     volumes:
       - evolution_instances:/evolution/instances
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
   # ==========================================
   # CAMADA DE ORQUESTRAÇÃO E FLUXOS (n8n)
   # ==========================================
   n8n:
-    image: n8nio/n8n:latest
+    image: docker.n8n.io/n8nio/n8n:stable
     container_name: isp-n8n
     restart: always
     ports:
