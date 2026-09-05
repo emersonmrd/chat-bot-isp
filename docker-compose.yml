@@ -5,7 +5,7 @@ services:
   postgres:
     image: postgres:15-alpine
     container_name: isp-postgres
-    restart: always
+    restart: "no"
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -23,7 +23,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: isp-redis
-    restart: always
+    restart: "no"
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis_data:/data
@@ -41,7 +41,7 @@ services:
   evolution-api:
     image: evoapicloud/evolution-api:v2.3.6
     container_name: isp-evolution
-    restart: always
+    restart: "no"
     ports:
       - "8080:8080"
     environment:
@@ -52,6 +52,7 @@ services:
       - DATABASE_CONNECTION_URI=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
       - CACHE_ENABLED=true
       - CACHE_REDIS_URI=redis://redis:6379
+      - CHATWOOT_ENABLED=true
     depends_on:
       postgres:
         condition: service_healthy
@@ -66,7 +67,7 @@ services:
   n8n:
     image: docker.n8n.io/n8nio/n8n:stable
     container_name: isp-n8n
-    restart: always
+    restart: "no"
     ports:
       - "5678:5678"
     environment:
@@ -100,7 +101,7 @@ services:
   chatwoot-web:
     image: chatwoot/chatwoot:v3.10.0
     container_name: isp-chatwoot-web
-    restart: always
+    restart: "no"
     ports:
       - "3000:3000"
     environment:
@@ -131,7 +132,7 @@ services:
   chatwoot-worker:
     image: chatwoot/chatwoot:v3.10.0
     container_name: isp-chatwoot-worker
-    restart: always
+    restart: "no"
     environment:
       - FRONTEND_URL=${CHATWOOT_FRONTEND_URL}
       - SECRET_KEY_BASE=${CHATWOOT_SECRET_KEY}

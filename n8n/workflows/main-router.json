@@ -1,4 +1,5 @@
 {
+  "id": "WflISPMainRouter01",
   "name": "ISP - Roteador Principal & Menu",
   "nodes": [
     {
@@ -11,100 +12,64 @@
       "name": "Webhook Evolution API",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [200, 300],
+      "position": [100, 300],
       "webhookId": "whatsapp-isp"
     },
     {
       "parameters": {
-        "jsCode": "const body = $input.item.json.body || $input.item.json;\n\n// Ignora mensagens enviadas pelo proprio bot ou de status\nif (!body.data || body.data.key.fromMe || !body.data.message) {\n  return [];\n}\n\nconst remoteJid = body.data.key.remoteJid;\n// Ignora grupos (apenas conversas privadas @s.whatsapp.net)\nif (remoteJid.includes('@g.us')) {\n  return [];\n}\n\nconst pushName = body.data.pushName || 'Cliente';\n\n// Extrai texto da mensagem\nlet text = '';\nif (body.data.message.conversation) {\n  text = body.data.message.conversation;\n} else if (body.data.message.extendedTextMessage && body.data.message.extendedTextMessage.text) {\n  text = body.data.message.extendedTextMessage.text;\n}\n\ntext = text.trim();\n\nreturn [{\n  json: {\n    remoteJid: remoteJid,\n    pushName: pushName,\n    text: text,\n    cleanText: text.toLowerCase()\n  }\n}];"
+        "jsCode": "const body = $input.item.json.body || $input.item.json;\n\n// Ignora mensagens de status ou do proprio bot\nif (!body.data || body.data.key.fromMe || !body.data.message) {\n  return [];\n}\n\nconst remoteJid = body.data.key.remoteJid;\nif (remoteJid.includes('@g.us')) {\n  return [];\n}\n\nconst pushName = body.data.pushName || 'Cliente';\nlet text = '';\nif (body.data.message.conversation) {\n  text = body.data.message.conversation;\n} else if (body.data.message.extendedTextMessage && body.data.message.extendedTextMessage.text) {\n  text = body.data.message.extendedTextMessage.text;\n}\n\ntext = text.trim();\nconst cleanText = text.toLowerCase();\n\nreturn [{\n  json: {\n    remoteJid: remoteJid,\n    number: remoteJid.replace('@s.whatsapp.net', ''),\n    pushName: pushName,\n    text: text,\n    cleanText: cleanText\n  }\n}];"
       },
       "id": "2",
       "name": "Filtrar & Tratar Mensagem",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [420, 300]
+      "position": [320, 300]
     },
     {
       "parameters": {
-        "dataType": "string",
-        "value1": "={{ $json.cleanText }}",
-        "rules": {
-          "rules": [
-            {
-              "value2": "1",
-              "outputKey": "suporte"
-            },
-            {
-              "value2": "2",
-              "outputKey": "financeiro"
-            },
-            {
-              "value2": "3",
-              "outputKey": "comercial"
-            }
-          ]
-        },
-        "fallbackOutput": "menu_principal"
+        "operation": "executeQuery",
+        "query": "=SELECT session_data FROM bot_sessions WHERE remote_jid = '{{ $json.remoteJid }}';"
       },
       "id": "3",
-      "name": "Roteador de Opções",
-      "type": "n8n-nodes-base.switch",
-      "typeVersion": 3,
-      "position": [660, 300]
+      "name": "Buscar Sessao no Postgres",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [540, 300],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "Postgres Local"
+        }
+      },
+      "continueOnFail": true
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "http://isp-evolution:8080/message/sendText/isp-atendimento",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "apikey",
-              "value": "evolucao_isp_key_2026"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"number\": \"{{ $json.remoteJid.replace('@s.whatsapp.net', '') }}\",\n  \"text\": \"Olá, *{{ $json.pushName }}*! 👋 Seja bem-vindo ao atendimento do seu Provedor de Internet.\\n\\nPor favor, digite o número da opção desejada:\\n\\n1️⃣ *Suporte Técnico*\\n2️⃣ *Financeiro & 2ª Via*\\n3️⃣ *Comercial & Planos*\"\n}"
+        "jsCode": "const inputData = $('Filtrar & Tratar Mensagem').item.json;\nlet rawSession = null;\n\nif ($input.item && $input.item.json && $input.item.json.session_data) {\n  rawSession = $input.item.json.session_data;\n}\n\nlet session = { state: 'MAIN_MENU', context: {}, attempts: 0 };\nif (rawSession) {\n  try {\n    session = typeof rawSession === 'string' ? JSON.parse(rawSession) : rawSession;\n    if (typeof session.attempts !== 'number') session.attempts = 0;\n  } catch (e) {\n    session = { state: 'MAIN_MENU', context: {}, attempts: 0 };\n  }\n}\n\nconst input = inputData.cleanText;\nlet responseText = '';\nlet nextState = session.state;\nlet sessionData = session.context || {};\nlet attempts = session.attempts || 0;\n\n// Comando global para reiniciar\nif (input === 'menu' || input === 'inicio' || input === 'sair' || input === 'cancelar') {\n  session.state = 'MAIN_MENU';\n  sessionData = {};\n  attempts = 0;\n}\n\nfunction handleInvalidInput(repeatQuestion) {\n  attempts++;\n  if (attempts >= 3) {\n    nextState = 'MAIN_MENU';\n    sessionData = {};\n    attempts = 0;\n    return '⚠️ *Parece que estamos com dificuldades para entender sua resposta.*\\n\\nO que deseja fazer?\\n\\nDigite *MENU* para reiniciar o atendimento ou aguarde para falar com um de nossos atendentes.';\n  }\n  return '⚠️ *Não entendi sua resposta.* (Tentativa ' + attempts + '/3)\\n\\n' + repeatQuestion;\n}\n\nswitch (session.state) {\n  case 'MAIN_MENU':\n    attempts = 0;\n    if (input === '1') {\n      nextState = 'SUPORTE_LOS';\n      responseText = '🔧 *Suporte Técnico*\\n\\nVamos verificar sua conexão! Por favor, observe as luzes do seu modem/roteador:\\n\\nA luz com o nome *LOS* (ou PON) está *vermelha* ou *piscando*?\\n\\n1️⃣ *Sim*\\n2️⃣ *Não*';\n    } else if (input === '2') {\n      nextState = 'FINANCEIRO_MENU';\n      responseText = '💰 *Atendimento Financeiro*\\n\\nPor favor, escolha uma opção:\\n\\n1️⃣ *Segunda via de boleto / Código PIX*\\n2️⃣ *Consultar faturas em aberto*\\n3️⃣ *Falar com atendente financeiro*\\n\\n_(Digite *MENU* para voltar)_';\n    } else if (input === '3') {\n      nextState = 'COMERCIAL_MENU';\n      responseText = '🛒 *Comercial & Planos*\\n\\nPor favor, escolha uma opção:\\n\\n1️⃣ *Conhecer planos de Fibra*\\n2️⃣ *Upgrade de velocidade*\\n3️⃣ *Falar com consultor de vendas*\\n\\n_(Digite *MENU* para voltar)_';\n    } else {\n      responseText = 'Olá, *' + inputData.pushName + '*! 👋 Seja bem-vindo ao atendimento do seu Provedor de Internet.\\n\\nPor favor, digite o número da opção desejada:\\n\\n1️⃣ *Suporte Técnico*\\n2️⃣ *Financeiro & 2ª Via*\\n3️⃣ *Comercial & Planos*';\n    }\n    break;\n\n  case 'SUPORTE_LOS':\n    if (input === '1' || input === 'sim') {\n      nextState = 'MAIN_MENU';\n      sessionData = {};\n      attempts = 0;\n      responseText = '🚨 *Identificamos uma falha no sinal da sua fibra óptica!*\\n\\nComo a luz LOS está vermelha/piscando, nosso sistema gerou uma notificação para a equipe técnica.\\n\\n👤 Um de nossos atendentes de suporte entrará em contato em instantes por aqui para agendar a visita técnica!';\n    } else if (input === '2' || input === 'nao' || input === 'não') {\n      nextState = 'SUPORTE_REBOOT';\n      attempts = 0;\n      responseText = '🔄 *Reinicialização do Equipamento*\\n\\nPor favor, retire o seu roteador da tomada, aguarde *30 segundos* e ligue novamente.\\n\\nApós os LEDs estabilizarem, sua conexão voltou ao normal?\\n\\n1️⃣ *Sim, normalizou!*\\n2️⃣ *Não, continuo sem internet.*';\n    } else {\n      responseText = handleInvalidInput('Por favor, responda apenas:\\n1️⃣ para *Sim*\\n2️⃣ para *Não*\\n\\nA luz *LOS/PON* está *vermelha* ou *piscando*?');\n    }\n    break;\n\n  case 'SUPORTE_REBOOT':\n    if (input === '1' || input === 'sim') {\n      nextState = 'MAIN_MENU';\n      sessionData = {};\n      attempts = 0;\n      responseText = '🎉 *Excelente! Ficamos felizes que sua conexão foi restabelecida!*\\n\\nSe precisar de mais alguma coisa, basta enviar uma nova mensagem. Tenha um ótimo dia! 👋';\n    } else if (input === '2' || input === 'nao' || input === 'não') {\n      nextState = 'SUPORTE_WIFI_CHECK';\n      attempts = 0;\n      responseText = '📶 *Verificação de Wi-Fi vs Cabo*\\n\\nO problema de lentidão/queda está acontecendo *apenas no Wi-Fi* ou também via cabo de rede?\\n\\n1️⃣ *Apenas no Wi-Fi*\\n2️⃣ *Geral (Wi-Fi e Cabo)*';\n    } else {\n      responseText = handleInvalidInput('Por favor, responda apenas:\\n1️⃣ para *Sim (normalizou)*\\n2️⃣ para *Não (continua sem internet)*\\n\\nA sua internet voltou após reiniciar o roteador?');\n    }\n    break;\n\n  case 'SUPORTE_WIFI_CHECK':\n    if (input === '1') {\n      nextState = 'MAIN_MENU';\n      sessionData = {};\n      attempts = 0;\n      responseText = '📡 *Encaminhado para Suporte Especializado em Wi-Fi!*\\n\\nComo o problema é isolado na rede sem fio, transferi seu atendimento para um técnico de suporte analisar os canais e frequência do seu roteador.\\n\\n👤 Aguarde um momento que um atendente responderá aqui.';\n    } else if (input === '2') {\n      nextState = 'SUPORTE_DESCRICAO';\n      attempts = 0;\n      responseText = '📝 *Descreva o problema*\\n\\nPor favor, envie uma mensagem descrevendo o que está acontecendo (ex: lentidão, sites específicos que não abrem, quedas frequentes):';\n    } else {\n      responseText = handleInvalidInput('Por favor, responda:\\n1️⃣ para *Apenas no Wi-Fi*\\n2️⃣ para *Geral (Wi-Fi e Cabo)*');\n    }\n    break;\n\n  case 'SUPORTE_DESCRICAO':\n    nextState = 'MAIN_MENU';\n    sessionData = {};\n    attempts = 0;\n    responseText = '✅ *Informações registradas com sucesso!*\\n\\nHistórico do diagnóstico:\\n• Luz LOS: Normal\\n• Reinício do roteador: Não resolveu\\n• Tipo da falha: Geral (Wi-Fi e Cabo)\\n• Detalhes do cliente: \"' + inputData.text + '\"\\n\\n👤 Transferindo para o atendente de suporte com todo esse histórico. Aguarde um momento!';\n    break;\n\n  default:\n    nextState = 'MAIN_MENU';\n    attempts = 0;\n    responseText = 'Olá, *' + inputData.pushName + '*! 👋 Seja bem-vindo ao atendimento do seu Provedor de Internet.\\n\\nPor favor, digite o número da opção desejada:\\n\\n1️⃣ *Suporte Técnico*\\n2️⃣ *Financeiro & 2ª Via*\\n3️⃣ *Comercial & Planos*';\n    break;\n}\n\nconst newSessionJson = JSON.stringify({\n  state: nextState,\n  context: sessionData,\n  attempts: attempts,\n  updatedAt: new Date().toISOString()\n});\n\nreturn [{\n  json: {\n    remoteJid: inputData.remoteJid,\n    number: inputData.number,\n    responseText: responseText,\n    newSessionJson: newSessionJson,\n    sqlUpsert: `INSERT INTO bot_sessions (remote_jid, session_data, updated_at) VALUES ('${inputData.remoteJid}', '${newSessionJson}', NOW()) ON CONFLICT (remote_jid) DO UPDATE SET session_data = EXCLUDED.session_data, updated_at = NOW();`,\n    payload: {\n      number: inputData.number,\n      text: responseText\n    }\n  }\n}];"
       },
       "id": "4",
-      "name": "Enviar Menu Principal",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [950, 420]
+      "name": "Maquina de Estados & Validacao",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [760, 300]
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "http://isp-evolution:8080/message/sendText/isp-atendimento",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "apikey",
-              "value": "evolucao_isp_key_2026"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"number\": \"{{ $json.remoteJid.replace('@s.whatsapp.net', '') }}\",\n  \"text\": \"🔧 *Suporte Técnico*\\n\\nVamos verificar sua conexão! Por favor, observe as luzes do seu modem/roteador:\\n\\nA luz com o nome *LOS* (ou PON) está *vermelha* ou *piscando*?\\n\\nResponda com:\\n*SIM* ou *NAO*\"\n}"
+        "operation": "executeQuery",
+        "query": "={{ $json.sqlUpsert }}"
       },
       "id": "5",
-      "name": "Menu Suporte",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [950, 160]
+      "name": "Salvar Sessao no Postgres",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [980, 300],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "Postgres Local"
+        }
+      },
+      "continueOnFail": true
     },
     {
       "parameters": {
@@ -125,40 +90,13 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"number\": \"{{ $json.remoteJid.replace('@s.whatsapp.net', '') }}\",\n  \"text\": \"💰 *Atendimento Financeiro*\\n\\nSelecione o que precisa:\\n\\n1️⃣ *Segunda via de boleto (Código PIX)*\\n2️⃣ *Consultar faturas em aberto*\\n3️⃣ *Falar com atendente financeiro*\"\n}"
+        "jsonBody": "={{ JSON.stringify($json.payload) }}"
       },
       "id": "6",
-      "name": "Menu Financeiro",
+      "name": "Enviar Resposta WhatsApp",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [950, 260]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "http://isp-evolution:8080/message/sendText/isp-atendimento",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "apikey",
-              "value": "evolucao_isp_key_2026"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"number\": \"{{ $json.remoteJid.replace('@s.whatsapp.net', '') }}\",\n  \"text\": \"🛒 *Comercial e Planos*\\n\\nConheça nossas opções:\\n\\n1️⃣ *Planos de Fibra Residencial*\\n2️⃣ *Upgrade de velocidade*\\n3️⃣ *Falar com consultor de vendas*\"\n}"
-      },
-      "id": "7",
-      "name": "Menu Comercial",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [950, 340]
+      "position": [1200, 300]
     }
   ],
   "connections": {
@@ -177,39 +115,40 @@
       "main": [
         [
           {
-            "node": "Roteador de Opções",
+            "node": "Buscar Sessao no Postgres",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Roteador de Opções": {
+    "Buscar Sessao no Postgres": {
       "main": [
         [
           {
-            "node": "Menu Suporte",
+            "node": "Maquina de Estados & Validacao",
             "type": "main",
             "index": 0
           }
-        ],
+        ]
+      ]
+    },
+    "Maquina de Estados & Validacao": {
+      "main": [
         [
           {
-            "node": "Menu Financeiro",
+            "node": "Salvar Sessao no Postgres",
             "type": "main",
             "index": 0
           }
-        ],
+        ]
+      ]
+    },
+    "Salvar Sessao no Postgres": {
+      "main": [
         [
           {
-            "node": "Menu Comercial",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Enviar Menu Principal",
+            "node": "Enviar Resposta WhatsApp",
             "type": "main",
             "index": 0
           }
