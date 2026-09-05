@@ -1,0 +1,224 @@
+{
+  "name": "ISP - Roteador Principal & Menu",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp-isp",
+        "options": {}
+      },
+      "id": "1",
+      "name": "Webhook Evolution API",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 300],
+      "webhookId": "whatsapp-isp"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.item.json.body || $input.item.json;\n\n// Ignora mensagens enviadas pelo proprio bot ou de status\nif (!body.data || body.data.key.fromMe || !body.data.message) {\n  return [];\n}\n\nconst remoteJid = body.data.key.remoteJid;\n// Ignora grupos (apenas conversas privadas @s.whatsapp.net)\nif (remoteJid.includes('@g.us')) {\n  return [];\n}\n\nconst pushName = body.data.pushName || 'Cliente';\n\n// Extrai texto da mensagem\nlet text = '';\nif (body.data.message.conversation) {\n  text = body.data.message.conversation;\n} else if (body.data.message.extendedTextMessage && body.data.message.extendedTextMessage.text) {\n  text = body.data.message.extendedTextMessage.text;\n}\n\ntext = text.trim();\n\nreturn [{\n  json: {\n    remoteJid: remoteJid,\n    pushName: pushName,\n    text: text,\n    cleanText: text.toLowerCase()\n  }\n}];"
+      },
+      "id": "2",
+      "name": "Filtrar & Tratar Mensagem",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json.cleanText }}",
+        "rules": {
+          "rules": [
+            {
+              "value2": "1",
+              "outputKey": "suporte"
+            },
+            {
+              "value2": "2",
+              "outputKey": "financeiro"
+            },
+            {
+              "value2": "3",
+              "outputKey": "comercial"
+            }
+          ]
+        },
+        "fallbackOutput": "menu_principal"
+      },
+      "id": "3",
+      "name": "Roteador de Opções",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://isp-evolution:8080/message/sendText/isp-atendimento",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "evolucao_isp_key_2026"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"number\": \"{{ $json.remoteJid.replace('@s.whatsapp.net', '') }}\",\n  \"text\": \"Olá, *{{ $json.pushName }}*! 👋 Seja bem-vindo ao atendimento do seu Provedor de Internet.\\n\\nPor favor, digite o número da opção desejada:\\n\\n1️⃣ *Suporte Técnico*\\n2️⃣ *Financeiro & 2ª Via*\\n3️⃣ *Comercial & Planos*\"\n}"
+      },
+      "id": "4",
+      "name": "Enviar Menu Principal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [950, 420]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://isp-evolution:8080/message/sendText/isp-atendimento",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "evolucao_isp_key_2026"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"number\": \"{{ $json.remoteJid.replace('@s.whatsapp.net', '') }}\",\n  \"text\": \"🔧 *Suporte Técnico*\\n\\nVamos verificar sua conexão! Por favor, observe as luzes do seu modem/roteador:\\n\\nA luz com o nome *LOS* (ou PON) está *vermelha* ou *piscando*?\\n\\nResponda com:\\n*SIM* ou *NAO*\"\n}"
+      },
+      "id": "5",
+      "name": "Menu Suporte",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [950, 160]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://isp-evolution:8080/message/sendText/isp-atendimento",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "evolucao_isp_key_2026"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"number\": \"{{ $json.remoteJid.replace('@s.whatsapp.net', '') }}\",\n  \"text\": \"💰 *Atendimento Financeiro*\\n\\nSelecione o que precisa:\\n\\n1️⃣ *Segunda via de boleto (Código PIX)*\\n2️⃣ *Consultar faturas em aberto*\\n3️⃣ *Falar com atendente financeiro*\"\n}"
+      },
+      "id": "6",
+      "name": "Menu Financeiro",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [950, 260]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://isp-evolution:8080/message/sendText/isp-atendimento",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "evolucao_isp_key_2026"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"number\": \"{{ $json.remoteJid.replace('@s.whatsapp.net', '') }}\",\n  \"text\": \"🛒 *Comercial e Planos*\\n\\nConheça nossas opções:\\n\\n1️⃣ *Planos de Fibra Residencial*\\n2️⃣ *Upgrade de velocidade*\\n3️⃣ *Falar com consultor de vendas*\"\n}"
+      },
+      "id": "7",
+      "name": "Menu Comercial",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [950, 340]
+    }
+  ],
+  "connections": {
+    "Webhook Evolution API": {
+      "main": [
+        [
+          {
+            "node": "Filtrar & Tratar Mensagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtrar & Tratar Mensagem": {
+      "main": [
+        [
+          {
+            "node": "Roteador de Opções",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Roteador de Opções": {
+      "main": [
+        [
+          {
+            "node": "Menu Suporte",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Menu Financeiro",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Menu Comercial",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Enviar Menu Principal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
