@@ -1,25 +1,45 @@
 # Contexto do Projeto: Chatbot para ISPs
 
 ## Objetivo
-Desenvolver uma solução de chatbot omnichannel para pequenos e médios provedores de internet (ISPs). O sistema deve rotear o cliente para Suporte Técnico (com troubleshooting estruturado), Financeiro ou Comercial, com transbordo humano integrado.
+Desenvolver uma solução de chatbot omnichannel para pequenos e médios provedores de internet (ISPs). O sistema roteia o cliente para Suporte Técnico (com troubleshooting estruturado), Financeiro (auto-serviço e 2ª via) ou Comercial (vendas e viabilidade), com transbordo humano integrado no Chatwoot e pesquisa de satisfação (CSAT).
 
-## Arquitetura Atual em Discussão
-- **Canal:** WhatsApp
-- **API WhatsApp:** Em discussão (Evolution API vs Cloud API oficial)
-- **Orquestrador de Fluxos:** n8n
-- **Inbox dos Atendentes:** Chatwoot
-- **Banco de Dados & Cache:** PostgreSQL e Redis
-- **Infraestrutura Inicial:** Local com Docker (estudos), com visão para produção.
+## Arquitetura Final Implementada
+- **Canal:** WhatsApp (Evolution API v2.3.6)
+- **Orquestrador de Fluxos:** n8n (Máquina de estados baseada em `$getWorkflowStaticData`)
+- **Inbox dos Atendentes:** Chatwoot v3.10.0 (canal API integrado com Evolution)
+- **Banco de Dados & Cache:** PostgreSQL 15 e Redis 7
+- **Infraestrutura:** Docker Compose com rede interna isolada `isp-network`.
 
-## Boas Práticas e Regras de Desenvolvimento (TDD & Git)
-1. **Git Flow:** O projeto utiliza Git. Cada nova funcionalidade, alteração de infraestrutura ou fluxo do n8n deve ser desenvolvida em uma branch separada (ex: `feature/infra-docker`, `feature/fluxo-suporte`) e "mergiada" na principal apenas quando funcional.
-2. **TDD e Testes:** Antes de implementar fluxos ou configurações, os testes (ou critérios de aceite automatizáveis) devem ser definidos. Para a infra, isso significa escrever `healthchecks` no Docker. Para o n8n, mock de webhooks.
-3. **Agentes Recuperáveis:** Todo subagente que for ativado deve ler **este arquivo** (`docs/PROJECT_CONTEXT.md`) antes de iniciar seu trabalho para herdar o estado atual do projeto.
+## Fluxos e Recursos Operacionais
+1. **Menu Principal & Escape:**
+   - 1: Suporte Técnico
+   - 2: Financeiro & 2ª Via
+   - 3: Comercial & Planos
+   - Comandos de escape: `menu`, `sair`, `inicio`, `voltar`, `#menu`, `#sair`.
+   - Limite de 3 tentativas para entradas inválidas.
 
-## Estrutura da Equipe de Agentes
-- **Arquiteto de Sistemas (`isp_architect`):** Responsável por definir a stack final, infraestrutura e arquitetura de integração.
-- **Engenheiro de Automação (`isp_automation_dev`):** Responsável por construir e testar os fluxos JSON do n8n, webhooks e roteamentos.
-- **Especialista DevOps (`isp_infra_devops`):** Responsável pela criação do `docker-compose.yml`, variáveis de ambiente, volumes e deploy.
+2. **Suporte Técnico:**
+   - Detecção de LOS/PON vermelha (rompimento de fibra).
+   - Guia de reinicialização do roteador (30s).
+   - Diagnóstico de Wi-Fi isolado vs falha geral.
+   - Transbordo para técnico humano com nota privada contendo histórico de diagnóstico.
+
+3. **Financeiro:**
+   - Validação de CPF (11 dígitos).
+   - 2ª via de fatura com Código PIX Copia e Cola mockado + Link PDF.
+   - Consulta de faturas abertas.
+   - Desbloqueio em Confiança por 48 horas.
+   - Transbordo para atendente financeiro.
+
+4. **Comercial:**
+   - Planos de fibra residencial e corporativos com link dedicado.
+   - Simulação de upgrades.
+   - Coleta de endereço/CEP para consulta de viabilidade e repasse de lead qualificado ao consultor.
+
+5. **Transbordo Silencioso & CSAT:**
+   - Bot silencia 100% durante o atendimento humano.
+   - Ao resolver o ticket no Chatwoot (`conversation_status_changed` -> `resolved`), o webhook dispara a pesquisa CSAT (1 a 4).
+   - A resposta do cliente encerra o ciclo e reseta para o menu principal.
 
 ## Estado Atual
-Aguardando definição arquitetural final pelo usuário em conjunto com o Arquiteto.
+Sistema 100% implementado, testado e validado de ponta a ponta.
